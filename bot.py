@@ -4,9 +4,13 @@ import time
 import asyncio
 import re
 
-CARTAS_PARA_IGNORAR = ['Island', 'Forest']
+BASIC_LANDS = {"ISLAND", "SWAMP", "MOUNTAIN", "FOREST", "PLAINS", "WASTES"}
+
+LOJAS = {'mercadia':'https://www.mercadiastore.com.br/',
+        'calabouco':'https://www.lojacalabouco.com.br/#'}
+
 # 1. Pega nome da carta
-# 1.1. Busca o nome em portugues da carta com a API do scryfall
+# 1.1. Busca o nome em portugues da carta com a API do scryfall 
 # 2. Abre mercadia.com.br
 # 3. Pesquisa o nome da carta
 # 4. Pega o preço da carta se existir
@@ -57,8 +61,19 @@ def traduzir_carta_mtg(nome_ingles):
 
 
 
-async def raspar_de_varios_resultados():
-    pass
+async def raspar_de_varios_resultados(page, nome_carta):
+    todas_as_opcoes = await page.locator('div.card-item').all()
+    print(f'Localizamos {len(todas_as_opcoes)} itens, buscando o certo ...')
+
+    for item in todas_as_opcoes:
+        fonte_imagem_item = await item.locator('div.card-img a img').get_attribute('src')
+        nome_item = await item.locator('div.card-desc div.title a').inner_text()
+        print(f'{nome_carta}, {nome_item}')
+
+        if 'magic' in fonte_imagem_item and nome_item.upper() == nome_carta.upper():
+            await item.click()
+            await page.wait_for_load_state('networkidle')
+            await raspar_de_resultado_unico(page)
 
 
 
@@ -84,15 +99,14 @@ async def raspar_de_resultado_unico(page):
 
 
 
-async def raspar_preco_carta(nome_carta='Wild Growth'.upper()):
-    if nome_carta == 'SWAMP' or nome_carta == 'ISLAND':
-        return
+async def raspar_preco_carta(url, nome_carta):
+    if nome_carta.upper() in BASIC_LANDS:
+        return 0
     
     nome_busca = traduzir_carta_mtg(nome_carta).upper()
 
-    print(f'NOME ENCONTRADO NA API: {nome_busca}')
+    print(f'\nNOME ENCONTRADO NA API: {nome_busca}')
 
-    url = f'https://www.lojacalabouco.com.br/#'
     
     async with async_playwright() as ap:
         browser = await ap.firefox.launch(headless=False)
@@ -101,20 +115,26 @@ async def raspar_preco_carta(nome_carta='Wild Growth'.upper()):
 
         # Procura o campo de busca, e escreve o nome da carta traduzido nele
         await page.locator('#fSearch.form-control.inp_busca').type(nome_busca)
-        print(f'PESQUISANDO POR {nome_carta} -> {nome_busca.upper()}')
+        print(f'PESQUISANDO POR {nome_carta.upper()} -> {nome_busca.upper()}')
 
+        # Procura o auto complete e clica
         selector_primeiro_autocomplete = 'section.item > div.card-title'
         try:
             await page.locator(selector_primeiro_autocomplete).first.click(timeout=5000)# encontra a primeira ocorrencia do autocomplete e clica
         except:
-            print(f'ERRO AO ENCONTRAR {nome_busca}, BUSCANDO POR {nome_carta}')
+            # Caso ele não ache com o nome da API, busca com o nome original da busca
+            print(f'ERRO AO ENCONTRAR {nome_busca}, BUSCANDO POR {nome_carta.upper()}')
             await page.locator('#fSearch.form-control.inp_busca').clear()
             await page.locator('#fSearch.form-control.inp_busca').type(nome_carta)
             await page.locator(selector_primeiro_autocomplete).first.click(timeout=5000)
 
-
+        # Espera a pagina carregar 
         await page.wait_for_load_state('networkidle')
-        await raspar_de_resultado_unico(page)
+
+        try:
+            await raspar_de_varios_resultados(page,nome_busca)
+        except:
+            await raspar_de_resultado_unico(page)
 
 
 
@@ -155,8 +175,14 @@ async def raspar_lista_cartas():
     # cartas_velhas = ['Blue Elemental Blast','Red Elemental Blast']
     decklist_limpa = set(re.findall(r'^\s*\d+\s+(.+)', decklist, re.MULTILINE))
 
-    for carta in decklist_limpa:
-        await raspar_preco_carta(carta)
+    lista_para_testes = ['Ponder']
+
+    print(len(decklist_limpa))
+
+    for nome, link in LOJAS.items():
+        print(f"====================================\nESCAVANDO EM {nome.upper()}\n====================================")
+        for carta in decklist_limpa:
+            await raspar_preco_carta(link,carta)
 
 
 
