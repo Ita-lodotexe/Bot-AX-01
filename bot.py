@@ -6,8 +6,8 @@ import re
 
 BASIC_LANDS = {"ISLAND", "SWAMP", "MOUNTAIN", "FOREST", "PLAINS", "WASTES"}
 
-LOJAS = {'mercadia':'https://www.mercadiastore.com.br/',
-        'calabouco':'https://www.lojacalabouco.com.br/#'}
+LOJAS = {'calabouco':'https://www.lojacalabouco.com.br/#',
+        'mercadia':'https://www.mercadiastore.com.br/',}
 
 SELECTOR_IMAGEM_CARD_UNICO = 'html body section.bg-clean div.container div.bloco_cards div.imagem_cards div#imagemScroll figure#imagemOriginal.text-center img#img_0.load-capty-0.pProdItem'
 
@@ -19,8 +19,13 @@ SELECTOR_IMAGEM_CARD_UNICO = 'html body section.bg-clean div.container div.bloco
 # 4.5. Se não existir, avisa que a carta não foi encontrada
 # 5. Imprime o preço da carta
 
+
+# =================================================
+#  Busca pelo id da carta e usa o id para achar
+#             o nome em ptbr da carta
+# =================================================
 def traduzir_carta_mtg(nome_ingles):
-    # Endpoint de nome exato é muito mais rápido e preciso que o /search
+    # Endpoint de nome exato
     url_base = "https://api.scryfall.com/cards/named"
     params = {
         "exact": nome_ingles,
@@ -32,8 +37,7 @@ def traduzir_carta_mtg(nome_ingles):
         if response.status_code == 200:
             dados_ingles = response.json()
             
-            # Aqui está o segredo: Pegamos o ID da carta (Oracle ID) 
-            # e buscamos especificamente a versão 'pt' dela
+            # Pegamos o ID da carta e buscamos especificamente a versão 'pt' dela
             oracle_id = dados_ingles.get('oracle_id')
             
             # Buscamos no Scryfall a versão em português desta carta específica
@@ -48,13 +52,13 @@ def traduzir_carta_mtg(nome_ingles):
             if res_pt.status_code == 200:
                 dados_pt = res_pt.json()['data'][0]
                 
-                # Tratamento para cartas de duas faces (Double Faced)
+                # Tratamento para cartas de duas faces
                 if 'printed_name' in dados_pt:
                     return dados_pt['printed_name']
                 elif 'card_faces' in dados_pt:
                     return dados_pt['card_faces'][0]['printed_name']
             
-            # Se não houver versão PT, retorna o nome em inglês (comum em cartas antigas)
+            # Se não houver versão PT, retorna o nome em inglês
             return dados_ingles.get('name')
             
         return f"Não encontrada: {nome_ingles}"
@@ -62,47 +66,62 @@ def traduzir_carta_mtg(nome_ingles):
         return f"Erro: {e}"
 
 
-
-
+# =================================================
+#      Função que serve para encontrar a carta 
+#     procurada quando houverem varios resultados 
+#                   para a pesquisa
+# =================================================
 async def raspar_de_varios_resultados(page, nome_carta:str=' ' , nome_ptbr:str=' '):
-    todas_as_opcoes = await page.locator('div.card-item').all()
+    todas_as_opcoes = await page.locator('div.card-item').all() #Pega todos os itens da pagina
     print(f'Localizamos {len(todas_as_opcoes)} itens, buscando o certo ...')
 
     for item in todas_as_opcoes:
         try:
-            fonte_imagem_item = await item.locator('div.card-img a img').get_attribute('src')
-            nome_item = await item.locator('div.card-desc div.title a').inner_text()
+            fonte_imagem_item = await item.locator('div.card-img a img').get_attribute('src') #Pega o link da imagem do item
+            nome_item = await item.locator('div.card-desc div.title a').inner_text() #Procura o nome do item na descrição
 
             nome_ptbr = nome_ptbr.strip().upper()
             nome_carta = nome_carta.strip().upper()
             nome_item = nome_item.strip().upper()
 
+            # Se no link houver a palavra "magic" e no nome do item for o mesmo da carta buscada, clica 
             if 'magic' in fonte_imagem_item and ((nome_item == nome_carta or nome_item == nome_ptbr)):
                 await item.click()
                 await page.wait_for_load_state('networkidle')
                 await raspar_de_resultado_unico(page)
         except Exception as e:
+            # Para qualquer erro que ocorrer no processo, sai da função
             print("Erro ao coletar dados, dando continuidade ...")
             print(f'ERROR:\n{e}')
+            return 
 
 
-
-
+# =================================================
+#     Função que serve para encontrar os dados 
+#         que buscamos na pagina da carta
+#              que queremos raspar
+# =================================================
 async def raspar_de_resultado_unico(page):
-    todas_as_colecoes = await page.locator('div.table-cards-row').all()
+    todas_as_colecoes = await page.locator('div.table-cards-row').all() #Busca as linhas de cada coleção
     print(f'Encontrados {len(todas_as_colecoes)} coleções')
 
     for i in todas_as_colecoes:
         quantidade = await i.locator('div:nth-child(5)').inner_text(timeout=3000)
         quantidade = int(quantidade[0])
+
         try:
             colecao = await i.locator('img.icon.icon-edicao').get_attribute('title')
         except:
             colecao = ''
 
+        # Se a quantidade da carta daquela edição for maior que 0, retorna o nome da coleção, quantidade e preço.
         if quantidade > 0:
-            preco = await i.locator('div.card-preco').inner_text(timeout=3000)
-            print(f'COLEÇÃO: {colecao} | QTD:{quantidade} | PRECO:{preco}')
+            preco = str(await i.locator('div.card-preco').inner_text(timeout=3000))
+            preco = preco.splitlines()
+            preco_float = float(preco[1].strip().replace(',','.').replace('R$',''))
+
+
+            print(f'COLEÇÃO: {colecao} | QTD:{quantidade} | PRECO: R${preco_float}')
         else:
             pass
 
@@ -119,7 +138,7 @@ async def raspar_preco_carta(url, nome_carta):
 
     
     async with async_playwright() as ap:
-        browser = await ap.firefox.launch(headless=False)
+        browser = await ap.firefox.launch()
         page = await browser.new_page()
         await page.goto(url, wait_until='domcontentloaded')
 
@@ -139,19 +158,16 @@ async def raspar_preco_carta(url, nome_carta):
                 await page.locator('#fSearch.form-control.inp_busca').type(nome_carta)
                 await page.locator(selector_primeiro_autocomplete).first.click(timeout=5000)
             except:
-                print("ERRO AO BUSCAR PELOS NOMES")
+                await page.locator('div.bg_btn').click(timeout=2000)
 
         # Espera a pagina carregar 
         await page.wait_for_load_state('networkidle')
 
-        card_unico = None
         try:
-            print('ENTROU NO 1') 
-            card_unico = await page.locator(SELECTOR_IMAGEM_CARD_UNICO).click(timeout=2000)
+            await page.locator(SELECTOR_IMAGEM_CARD_UNICO).click(timeout=2000)
             await raspar_de_resultado_unico(page)   
         except Exception as e:
-            print('ENTROU NO 2') 
-            print(f"ERRO AO BUSCAR CARD ÚNICO: {e}")
+            print(f"Mais de uma opção encontrada")
             await raspar_de_varios_resultados(page, nome_carta=nome_carta, nome_ptbr=nome_busca)
 
 
@@ -195,12 +211,13 @@ async def raspar_lista_cartas():
     decklist_limpa = set(re.findall(r'^\s*\d+\s+(.+)', decklist, re.MULTILINE))
 
     lista_para_testes = ['Ponder']
-
+    cartas_disp_calab = ['Augur of bolas','Counterspell','Bojuka bog']
+    
     print(len(decklist_limpa))
 
     for nome, link in LOJAS.items():
         print(f"====================================\nESCAVANDO EM {nome.upper()}\n====================================")
-        for carta in decklist_limpa:
+        for carta in cartas_disp_calab:
             await raspar_preco_carta(link,carta)
 
 
