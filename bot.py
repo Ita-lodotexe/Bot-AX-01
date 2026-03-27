@@ -9,6 +9,8 @@ BASIC_LANDS = {"ISLAND", "SWAMP", "MOUNTAIN", "FOREST", "PLAINS", "WASTES"}
 LOJAS = {'mercadia':'https://www.mercadiastore.com.br/',
         'calabouco':'https://www.lojacalabouco.com.br/#'}
 
+SELECTOR_IMAGEM_CARD_UNICO = 'html body section.bg-clean div.container div.bloco_cards div.imagem_cards div#imagemScroll figure#imagemOriginal.text-center img#img_0.load-capty-0.pProdItem'
+
 # 1. Pega nome da carta
 # 1.1. Busca o nome em portugues da carta com a API do scryfall 
 # 2. Abre mercadia.com.br
@@ -61,19 +63,27 @@ def traduzir_carta_mtg(nome_ingles):
 
 
 
-async def raspar_de_varios_resultados(page, nome_carta):
+
+async def raspar_de_varios_resultados(page, nome_carta:str=' ' , nome_ptbr:str=' '):
     todas_as_opcoes = await page.locator('div.card-item').all()
     print(f'Localizamos {len(todas_as_opcoes)} itens, buscando o certo ...')
 
     for item in todas_as_opcoes:
-        fonte_imagem_item = await item.locator('div.card-img a img').get_attribute('src')
-        nome_item = await item.locator('div.card-desc div.title a').inner_text()
-        print(f'{nome_carta}, {nome_item}')
+        try:
+            fonte_imagem_item = await item.locator('div.card-img a img').get_attribute('src')
+            nome_item = await item.locator('div.card-desc div.title a').inner_text()
 
-        if 'magic' in fonte_imagem_item and nome_item.upper() == nome_carta.upper():
-            await item.click()
-            await page.wait_for_load_state('networkidle')
-            await raspar_de_resultado_unico(page)
+            nome_ptbr = nome_ptbr.strip().upper()
+            nome_carta = nome_carta.strip().upper()
+            nome_item = nome_item.strip().upper()
+
+            if 'magic' in fonte_imagem_item and ((nome_item == nome_carta or nome_item == nome_ptbr)):
+                await item.click()
+                await page.wait_for_load_state('networkidle')
+                await raspar_de_resultado_unico(page)
+        except Exception as e:
+            print("Erro ao coletar dados, dando continuidade ...")
+            print(f'ERROR:\n{e}')
 
 
 
@@ -124,17 +134,26 @@ async def raspar_preco_carta(url, nome_carta):
         except:
             # Caso ele não ache com o nome da API, busca com o nome original da busca
             print(f'ERRO AO ENCONTRAR {nome_busca}, BUSCANDO POR {nome_carta.upper()}')
-            await page.locator('#fSearch.form-control.inp_busca').clear()
-            await page.locator('#fSearch.form-control.inp_busca').type(nome_carta)
-            await page.locator(selector_primeiro_autocomplete).first.click(timeout=5000)
+            try:
+                await page.locator('#fSearch.form-control.inp_busca').clear()
+                await page.locator('#fSearch.form-control.inp_busca').type(nome_carta)
+                await page.locator(selector_primeiro_autocomplete).first.click(timeout=5000)
+            except:
+                print("ERRO AO BUSCAR PELOS NOMES")
 
         # Espera a pagina carregar 
         await page.wait_for_load_state('networkidle')
 
+        card_unico = None
         try:
-            await raspar_de_varios_resultados(page,nome_busca)
-        except:
-            await raspar_de_resultado_unico(page)
+            print('ENTROU NO 1') 
+            card_unico = await page.locator(SELECTOR_IMAGEM_CARD_UNICO).click(timeout=2000)
+            await raspar_de_resultado_unico(page)   
+        except Exception as e:
+            print('ENTROU NO 2') 
+            print(f"ERRO AO BUSCAR CARD ÚNICO: {e}")
+            await raspar_de_varios_resultados(page, nome_carta=nome_carta, nome_ptbr=nome_busca)
+
 
 
 
