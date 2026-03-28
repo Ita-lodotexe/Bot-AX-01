@@ -1,18 +1,6 @@
-import asyncio
-import os
-import io
-from dotenv import load_dotenv
+from telegram.ext import ApplicationBuilder
 
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-from bot import *
-
-
-load_dotenv()
-
-def formatar_relatorio_telegram(resultados_scrapping):
-
+def formatar_relatorio_telegram(resultados_scrapping:dict):
     if not resultados_scrapping:
         return "⚠️ Nenhuma carta encontrada em estoque nas lojas monitoradas."
 
@@ -38,14 +26,11 @@ def formatar_relatorio_telegram(resultados_scrapping):
 
 
 
-async def enviar_notificacao_telegram(dicionario_lojas):
+async def enviar_notificacao_telegram(dicionario_lojas, token, chat_id):
     app = ApplicationBuilder().token(token).build()
-    
-    # 2. Gera o texto formatado
-    texto_final = formatar_relatorio_telegram(dicionario_lojas)
 
-    # 3. Envia a mensagem
-    # O parse_mode='HTML' é OBRIGATÓRIO para os links e negritos funcionarem
+    texto_final = formatar_relatorio_telegram(dicionario_lojas)
+    
     async with app:
         await app.bot.send_message(
             chat_id=chat_id, 

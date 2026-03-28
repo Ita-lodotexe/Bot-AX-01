@@ -1,15 +1,17 @@
 from playwright.async_api import async_playwright
 import requests
-import time
 import asyncio
 import re
+from dotenv import load_dotenv
 
 # IMPORTS DE MODULO
 from planilhas_bot import *
 from telegram_bot import *
 
+load_dotenv()
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+CHAT_ID = os.getenv('CHAT_ID')
 
 BASIC_LANDS = {"ISLAND", "SWAMP", "MOUNTAIN", "FOREST", "PLAINS", "WASTES"}
 
@@ -259,22 +261,31 @@ async def raspar_lista_cartas(lista_de_cartas:list=[], cartas_para_busca=''):
             print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
             cartas_disponiveis_por_loja[nome_loja] = {}
             for carta in lista_de_cartas:
+                carta = re.findall(r'^\s*\d*\s*(.+)', carta)[0]
                 scrap = await raspar_preco_carta(link_loja,carta)
                 nome = scrap[0]
                 cartas_disponiveis_por_loja[nome_loja][nome] = scrap[1:]
         
-
-    print(cartas_disponiveis_por_loja)
     return cartas_disponiveis_por_loja
 
 
 
 
 async def main():
+    # Conecta a planilha do google sheets
     aba_resultados, aba_busca  = conectar_planilha()
+
+    # Busca as cartas para scrapping direto da planilha de busca
     decklist = ler_da_planilha(aba_busca)
+
+    # Chama o scrapping passando a lista de cartas lida da planilha
     disponibilidade = await raspar_lista_cartas(decklist)
+
+    # Salva os resultados na planilha de resultados
     salvar_planilha(aba_resultados, disponibilidade)
+
+    # Envia a mensagem com as cartas para o telegram
+    await enviar_notificacao_telegram(disponibilidade, TELEGRAM_TOKEN, CHAT_ID)
 
 
 
