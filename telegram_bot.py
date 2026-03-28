@@ -11,47 +11,46 @@ from bot import *
 
 load_dotenv()
 
+def formatar_relatorio_telegram(resultados_scrapping):
 
-# 1 . Inicia o bot com um /start
-# 2 . Passa para o bot uma lista de cartas para busca
-# 3 . Bot passa a lista de cartas para o scrapper
-# 4 . Scrapper retorna as variáveis para o bot
-# 5 . Bot formata a mensagem e manda de volta
+    if not resultados_scrapping:
+        return "⚠️ Nenhuma carta encontrada em estoque nas lojas monitoradas."
 
-# =================================================
-#       Função que pega a entrada e ja ajusta
-#  independente de ser texto, linha ou arquivo txt
-# =================================================
-async def processar_entrada(update:Update, context:ContextTypes.DEFAULT_TYPE):
-    # Tratamento para arquivo
-    if update.message.document:
+    mensagem = "<b>🚀 Relatório de Disponibilidade MTG</b>\n\n"
+    
+    for loja, cartas in resultados_scrapping.items():
+        mensagem += f"<b>🏪 LOJA: {loja.upper()}</b>\n"
         
-        arquivo = await context.bot.get_file(update.message.document.file_id)
-        out = io.BytesIO()
+        for nome_carta, info in cartas.items():
+            if len(info) > 1:
+                colecao = info[1]
+                qtd = info[2]
+                preco = info[3]
+                link = info[4]
 
-        await arquivo.download_to_memory(out)
-        texto_bruto = out.read().decode('utf-8', errors='ignore')
-    
-    # Tratamento para qualquer texto
-    else:
-        texto_bruto = update.message.text.replace('/buscar', '').strip()
+                mensagem += f"• <a href='{link}'>{nome_carta}</a>\n"
+                mensagem += f"  └ 💰 R$ {preco} | 📦 Est: {qtd} | 📔 {colecao}\n"
         
-    
-    if not texto_bruto:
-        await update.message.reply_text('Ainda não recebi nenhum nome ou arquivo com as cartas')
-        return
-    
-    try:
-        texto_formatado = formatar_nomes_cartas(texto_bruto)
-        print(texto_formatado)
-        await update.message.reply_text('Buscando por cartas ...')
-    except Exception as e:
-        print("ERRO COM O TEXTO: {e}")
-        await update.message.reply_text('Houve um erro. Tente novamente.')
-        return
-    
-    if texto_formatado:
-        resultados = await raspar_lista_cartas(texto_formatado)
-        print(resultados)
-        await update.message.reply_text(f'RESULTADOS:\n {resultados}')
+        mensagem += "\n" # Espaço entre lojas
+        
+    return mensagem
 
+
+
+
+async def enviar_notificacao_telegram(dicionario_lojas):
+    app = ApplicationBuilder().token(token).build()
+    
+    # 2. Gera o texto formatado
+    texto_final = formatar_relatorio_telegram(dicionario_lojas)
+
+    # 3. Envia a mensagem
+    # O parse_mode='HTML' é OBRIGATÓRIO para os links e negritos funcionarem
+    async with app:
+        await app.bot.send_message(
+            chat_id=chat_id, 
+            text=texto_final, 
+            parse_mode='HTML',
+            disable_web_page_preview=True # Evita que o Telegram tente carregar o preview de todos os links
+        )
+    print("✅ Notificação enviada para o Telegram!")

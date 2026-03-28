@@ -23,6 +23,8 @@ def main():
     print("Bot rodando... Pressione Ctrl+C para parar.")
     app.run_polling()
 
+    
+
 
 
 if __name__ == "__main__":

@@ -4,6 +4,13 @@ import time
 import asyncio
 import re
 
+# IMPORTS DE MODULO
+from planilhas_bot import *
+from telegram_bot import *
+
+
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+
 BASIC_LANDS = {"ISLAND", "SWAMP", "MOUNTAIN", "FOREST", "PLAINS", "WASTES"}
 
 LOJAS = {'mercadia':'https://www.mercadiastore.com.br/',
@@ -103,6 +110,7 @@ async def raspar_de_varios_resultados(page, nome_carta:str=' ' , nome_ptbr:str='
 #              que queremos raspar
 # =================================================
 async def raspar_de_resultado_unico(page, nome_carta):
+    url_carta = page.url
     todas_as_colecoes = await page.locator('div.table-cards-row').all() #Busca as linhas de cada coleção
     print(f'Encontrados {len(todas_as_colecoes)} coleções')
 
@@ -127,8 +135,8 @@ async def raspar_de_resultado_unico(page, nome_carta):
                 preco_float = float(preco[0].strip().replace(',','.').replace('R$',''))
 
 
-            print(f'COLEÇÃO: {colecao} | QTD:{quantidade} | PRECO: R${preco_float}')
-            disponiveis.append([nome_carta, colecao, quantidade, preco_float])
+            print(f'COLEÇÃO: {colecao} | QTD:{quantidade} | PRECO: R${preco_float} ')
+            disponiveis.append([nome_carta, colecao, quantidade, preco_float, str(url_carta)])
         else:
             disponiveis.append([nome_carta,'NÃO DISPONÍVEL'])
 
@@ -149,7 +157,7 @@ async def raspar_preco_carta(url, nome_carta):
 
     
     async with async_playwright() as ap:
-        browser = await ap.firefox.launch(headless=False)
+        browser = await ap.firefox.launch(headless=True)
         page = await browser.new_page()
         await page.goto(url, wait_until='domcontentloaded')
 
@@ -189,8 +197,8 @@ async def raspar_preco_carta(url, nome_carta):
             print('Não achou nada')
         else:
             if len(resultados_scrapping[0]) > 2:
-                nome_saida, colecao_saida, qtd_saida, preco_saida = resultados_scrapping[0]
-                resultado = [nome_saida, colecao_saida, qtd_saida, preco_saida]
+                nome_saida, colecao_saida, qtd_saida, preco_saida, url_carta = resultados_scrapping[0]
+                resultado = [nome_saida, 'Disponível!' ,colecao_saida, qtd_saida, preco_saida, url_carta]
                 print(resultado)
                 return resultado
             else:
@@ -232,36 +240,44 @@ def formatar_nomes_cartas(texto_bruto):
 
 
 
-async def raspar_lista_cartas(cartas_para_busca=''):
-    cartas_para_busca = '''
-        13 Forest
-        4 Escape Tunnel
-        4 Llanowar Augur
-        4 Might of Old Krosa
-        4 Mutagenic Growth
-        4 Glistener Elf
-        4 Embiggen
-        4 Go Forth
-        1 Thirsting Roots
-        4 Rancor
-        2 Vines of Vastwood
-        4 Snakeskin Veil
-        4 Blight Mamba
-        4 Ichorclaw Myr
-                        '''
-    cartas_para_busca = set(re.findall(r'^\s*\d+\s+(.+)', cartas_para_busca, re.MULTILINE))
-
+async def raspar_lista_cartas(lista_de_cartas:list=[], cartas_para_busca=''):
     cartas_disponiveis_por_loja = {}
 
-    for nome_loja, link_loja in LOJAS.items():
-        print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
-        cartas_disponiveis_por_loja[nome_loja] = {}
+    if cartas_para_busca:
+        cartas_para_busca = set(re.findall(r'^\s*\d+\s+(.+)', cartas_para_busca, re.MULTILINE))
+        for nome_loja, link_loja in LOJAS.items():
+            print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
+            cartas_disponiveis_por_loja[nome_loja] = {}
 
-        for carta in cartas_para_busca:
-            scrap = await raspar_preco_carta(link_loja,carta)
-            if len(scrap) > 2:
+            for carta in cartas_para_busca:
+                scrap = await raspar_preco_carta(link_loja,carta)
                 nome = scrap[0]
                 cartas_disponiveis_por_loja[nome_loja][nome] = scrap[1:]
     
+    if lista_de_cartas:
+        for nome_loja, link_loja in LOJAS.items():
+            print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
+            cartas_disponiveis_por_loja[nome_loja] = {}
+            for carta in lista_de_cartas:
+                scrap = await raspar_preco_carta(link_loja,carta)
+                nome = scrap[0]
+                cartas_disponiveis_por_loja[nome_loja][nome] = scrap[1:]
+        
+
     print(cartas_disponiveis_por_loja)
     return cartas_disponiveis_por_loja
+
+
+
+
+async def main():
+    aba_resultados, aba_busca  = conectar_planilha()
+    decklist = ler_da_planilha(aba_busca)
+    disponibilidade = await raspar_lista_cartas(decklist)
+    salvar_planilha(aba_resultados, disponibilidade)
+
+
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
