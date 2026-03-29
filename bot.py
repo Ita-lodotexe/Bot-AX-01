@@ -138,10 +138,9 @@ async def raspar_de_resultado_unico(page, nome_carta):
 
 
             print(f'COLEÇÃO: {colecao} | QTD:{quantidade} | PRECO: R${preco_float} ')
-            disponiveis.append([nome_carta, colecao, quantidade, preco_float, str(url_carta)])
+            disponiveis.append([nome_carta, 'DISPONÍVEL', colecao, quantidade, preco_float, str(url_carta)])
         else:
             disponiveis.append([nome_carta,'NÃO DISPONÍVEL'])
-
     return disponiveis
 
 
@@ -197,47 +196,39 @@ async def raspar_preco_carta(url, nome_carta):
         
         if resultados_scrapping == None:
             print('Não achou nada')
+            return
         else:
-            if len(resultados_scrapping[0]) > 2:
-                nome_saida, colecao_saida, qtd_saida, preco_saida, url_carta = resultados_scrapping[0]
-                resultado = [nome_saida, 'Disponível!' ,colecao_saida, qtd_saida, preco_saida, url_carta]
-                print(resultado)
-                return resultado
-            else:
-                nome_saida, msg_saida = resultados_scrapping[0]
-                resultado = [nome_saida, msg_saida]
-                print(resultado)
-                return resultado
+            return resultados_scrapping
 
 
 
-def formatar_nomes_cartas(texto_bruto):
-    linhas = re.split(r'[\n,]', texto_bruto)
+# def formatar_nomes_cartas(texto_bruto):
+#     linhas = re.split(r'[\n,]', texto_bruto)
     
-    decklist_limpa = []
+#     decklist_limpa = []
     
-    for linha in linhas:
-        # Limpa espaços em branco nas pontas
-        linha = linha.strip()
-        if not linha:
-            continue
+#     for linha in linhas:
+#         # Limpa espaços em branco nas pontas
+#         linha = linha.strip()
+#         if not linha:
+#             continue
             
-        # Aplica um regex para buscar só pelo nome da carta e pronto
-        match = re.search(r'^\d*\s*x?\s*(.+)', linha, re.IGNORECASE)
+#         # Aplica um regex para buscar só pelo nome da carta e pronto
+#         match = re.search(r'^\d*\s*x?\s*(.+)', linha, re.IGNORECASE)
         
-        if match:
-            nome_carta = match.group(1).strip()
-            if nome_carta.upper() not in BASIC_LANDS:
-                decklist_limpa.append(nome_carta)
-        else:
-            # Se não bateu no regex adiciona direto
-            if linha.upper() not in BASIC_LANDS:
-                decklist_limpa.append(linha)
+#         if match:
+#             nome_carta = match.group(1).strip()
+#             if nome_carta.upper() not in BASIC_LANDS:
+#                 decklist_limpa.append(nome_carta)
+#         else:
+#             # Se não bateu no regex adiciona direto
+#             if linha.upper() not in BASIC_LANDS:
+#                 decklist_limpa.append(linha)
     
-    # LISTA > SET > LISTA para limpar duplicatas
-    decklist_limpa = set(decklist_limpa)
-    decklist_limpa = list(decklist_limpa).sort()
-    return decklist_limpa
+#     # LISTA > SET > LISTA para limpar duplicatas
+#     decklist_limpa = set(decklist_limpa)
+#     decklist_limpa = list(decklist_limpa).sort()
+#     return decklist_limpa
 
 
 
@@ -249,24 +240,63 @@ async def raspar_lista_cartas(lista_de_cartas:list=[], cartas_para_busca=''):
         cartas_para_busca = set(re.findall(r'^\s*\d+\s+(.+)', cartas_para_busca, re.MULTILINE))
         for nome_loja, link_loja in LOJAS.items():
             print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
-            cartas_disponiveis_por_loja[nome_loja] = {}
+            lista_resultados_loja = []
+            cartas_disponiveis_por_loja[nome_loja] = []
 
             for carta in cartas_para_busca:
                 scrap = await raspar_preco_carta(link_loja,carta)
-                nome = scrap[0]
-                cartas_disponiveis_por_loja[nome_loja][nome] = scrap[1:]
+                lista_resultados_loja.append(scrap)
+            cartas_disponiveis_por_loja[nome_loja] = lista_resultados_loja
+
     
     if lista_de_cartas:
         for nome_loja, link_loja in LOJAS.items():
             print(f"====================================\nESCAVANDO EM {nome_loja.upper()}\n====================================")
+            lista_resultados_loja = []
             cartas_disponiveis_por_loja[nome_loja] = {}
+
             for carta in lista_de_cartas:
                 carta = re.findall(r'^\s*\d*\s*(.+)', carta)[0]
                 scrap = await raspar_preco_carta(link_loja,carta)
-                nome = scrap[0]
-                cartas_disponiveis_por_loja[nome_loja][nome] = scrap[1:]
-        
-    return cartas_disponiveis_por_loja
+                lista_resultados_loja.append(scrap)
+            cartas_disponiveis_por_loja[nome_loja] = lista_resultados_loja
+
+    linhas_planilha = limpa_scrapping_para_planilha(cartas_disponiveis_por_loja)
+
+    return linhas_planilha, cartas_disponiveis_por_loja
+
+
+
+
+def limpa_scrapping_para_planilha(dados_por_loja:dict):
+    # LOJA : 
+    # Todas as cartas da loja =>[
+    #   Todas as ocorrencias de coleções da carta =>[
+    #        Os dados buscados da determinada coleção =>[  ]]]
+    linhas_finais_planilha = []
+
+    # Percorrendo o dicionário
+    for nome_loja, lista_de_listas in dados_por_loja.items():
+
+        # lista_de_listas contém as listas de cada carta
+        for resultados_carta in lista_de_listas:
+
+            # Filtro para remover identicos, como vários itens com "NÃO DISPONÍVEL"
+            disponiveis_unicos = {tuple(resultado) for resultado in resultados_carta if resultado[1] == 'DISPONÍVEL'}
+
+            if disponiveis_unicos:
+
+                # Se existem disponíveis, adicionamos todos eles à planilha
+                for item in disponiveis_unicos:
+
+                    # Adicionamos o nome da loja no início da linha para a planilha
+                    linhas_finais_planilha.append([nome_loja] + list(item))
+            else:
+                # Se a lista de disponíveis está vazia, pegamos o nome da carta do primeiro item da lista original e marcamos como esgotado
+                nome_carta = resultados_carta[0][0]
+                linhas_finais_planilha.append([nome_loja, nome_carta, "NÃO DISPONÍVEL", "---", 0, 0, "---"])
+
+    return linhas_finais_planilha
 
 
 
@@ -279,10 +309,10 @@ async def main():
     decklist = ler_da_planilha(aba_busca)
 
     # Chama o scrapping passando a lista de cartas lida da planilha
-    disponibilidade = await raspar_lista_cartas(decklist)
+    linhas_planilha, disponibilidade = await raspar_lista_cartas(decklist)
 
     # Salva os resultados na planilha de resultados
-    salvar_planilha(aba_resultados, disponibilidade)
+    salvar_planilha(aba_resultados, linhas_planilha)
 
     # Envia a mensagem com as cartas para o telegram
     await enviar_notificacao_telegram(disponibilidade, TELEGRAM_TOKEN, CHAT_ID)

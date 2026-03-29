@@ -27,7 +27,7 @@ def conectar_planilha():
     # cria um cabeçalho se a planilha estiver vazia.
     if not aba_resultados.row_values(1):
         aba_resultados.append_row(
-            ['NOME DA LOJA','CARTA','DISPONÍVEL?','COLEÇÃO','QUANTIDADE','PREÇO','LINK'],
+            ['NOME DA LOJA','CARTA','DISPONÍVEL?','COLEÇÃO','QUANTIDADE','PREÇO','LINK','COLETADO EM'],
             value_input_option='USER_ENTERED'
         )
         print('Cabeçalho criado na planilha.')
@@ -35,28 +35,16 @@ def conectar_planilha():
 
 
 
-def salvar_planilha(aba, resultados:dict):
+def salvar_planilha(aba, resultados):
     agora = datetime.now().strftime('%d/%m/%Y %H:%M')
     linhas = []
 
-    for nome_loja, inventario in resultados.items():
-        print(f"\n🏪 Loja: {nome_loja}")
+    for edicao_diferente in resultados:
+        loja, carta, disp, colecao, qtd, preco, link = edicao_diferente
+        linha = [str(loja).capitalize(), carta, disp, colecao, qtd, preco, link, agora]
 
-        for nome_carta, detalhes in inventario.items():
-            mensagem_saída = detalhes[0]
-            if len(detalhes) > 1:
-                colecao = detalhes[1]
-                qtd = detalhes[2]
-                preco = detalhes[3]
-                link_carta = detalhes[4]
+        linhas.append(linha)
 
-                print(f'{nome_carta}: {mensagem_saída}|{colecao}|{qtd}|r${preco}')
-                linha = [str(nome_loja).capitalize(), nome_carta, mensagem_saída, colecao, qtd, preco,link_carta]
-                linhas.append(linha)
-            else:    
-                print(f'{nome_carta}: {mensagem_saída}')
-                linha = [str(nome_loja).capitalize(), nome_carta, mensagem_saída]
-                linhas.append(linha)
     aba.append_rows(linhas, value_input_option='USER_ENTERED')
     print(f'{len(linhas)} linhas adicionadas na planilha.')
 
@@ -66,13 +54,10 @@ def salvar_planilha(aba, resultados:dict):
 def ler_da_planilha(aba_busca):
     valores_coluna = aba_busca.col_values(1)
 
-    print(f'Valores coluna: {valores_coluna}')
-
     if len(valores_coluna) <= 1:
         print("Planilha de busca está vazia ou só tem o cabeçalho.")
         return []
 
     decklist = valores_coluna[1:]
-    print(f'Decklist da planilha:{decklist}')
 
     return decklist

@@ -1,28 +1,42 @@
 from telegram.ext import ApplicationBuilder
 
-def formatar_relatorio_telegram(resultados_scrapping:dict):
+def formatar_relatorio_telegram(resultados_scrapping: dict):
     if not resultados_scrapping:
         return "⚠️ Nenhuma carta encontrada em estoque nas lojas monitoradas."
 
     mensagem = "<b>🚀 Relatório de Disponibilidade MTG</b>\n\n"
-    
-    for loja, cartas in resultados_scrapping.items():
-        mensagem += f"<b>🏪 LOJA: {loja.upper()}</b>\n"
-        
-        for nome_carta, info in cartas.items():
-            if len(info) > 1:
-                colecao = info[1]
-                qtd = info[2]
-                preco = info[3]
-                link = info[4]
+    encontrou_alguma = False
 
-                mensagem += f"• <a href='{link}'>{nome_carta}</a>\n"
-                mensagem += f"  └ 💰 R$ {preco} | 📦 Est: {qtd} | 📔 {colecao}\n"
-        
-        mensagem += "\n" # Espaço entre lojas
+    for loja, lista_de_cartas in resultados_scrapping.items():
+        # Criamos um bloco para a loja, mas só adicionamos se houver estoque
+        bloco_loja = f"<b>🏪 LOJA: {loja.upper()}</b>\n"
+        tem_estoque_nesta_loja = False
+
+        for sublista in lista_de_cartas:
+            for info in sublista:
+                # O seu formato parece ser: [Nome, Status, Coleção, Qtd, Preço, Link]
+                # Index: 0=Nome, 1=Status, 2=Coleção, 3=Qtd, 4=Preço, 5=Link
+                
+                if len(info) > 2 and info[1] == 'DISPONÍVEL':
+                    nome_carta = info[0]
+                    colecao    = info[2]
+                    qtd        = info[3]
+                    preco      = info[4]
+                    link       = info[5]
+
+                    bloco_loja += f"• <a href='{link}'>{nome_carta}</a>\n"
+                    bloco_loja += f"  └ 💰 R$ {preco} | 📦 Est: {qtd} | 📔 {colecao}\n"
+                    
+                    tem_estoque_nesta_loja = True
+                    encontrou_alguma = True
+
+        if tem_estoque_nesta_loja:
+            mensagem += bloco_loja + "\n"
+
+    if not encontrou_alguma:
+        return "⚠️ Nenhuma das cartas buscadas está disponível no momento."
         
     return mensagem
-
 
 
 
