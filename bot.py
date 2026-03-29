@@ -25,7 +25,7 @@ SELECTOR_IMAGEM_CARD_UNICO = 'html body section.bg-clean div.container div.bloco
 # 2. Abre mercadia.com.br
 # 3. Pesquisa o nome da carta
 # 4. Pega o preço da carta se existir
-# 4.5. Se não existir, avisa que a carta não foi encontrada
+# 4.5. Se não existir, avisa que a carta não foi encontradak
 # 5. Imprime o preço da carta
 
 
@@ -158,8 +158,22 @@ async def raspar_preco_carta(url, nome_carta):
 
     
     async with async_playwright() as ap:
-        browser = await ap.firefox.launch(headless=True)
-        page = await browser.new_page()
+        browser = await ap.firefox.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+            ]
+        )
+        context = await browser.new_context(
+            user_agent='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 '
+                    '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            locale='pt-BR',
+            timezone_id='America/Manaus',
+        )
+        page = await context.new_page()
         await page.goto(url, wait_until='domcontentloaded')
 
         # Procura o campo de busca, e escreve o nome da carta traduzido nele

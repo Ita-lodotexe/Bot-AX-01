@@ -1,0 +1,11 @@
+services:
+  bots:
+    build: .
+    container_name: bots-automacao
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - TZ=America/Manaus
+    volumes:
+      - .:/app
